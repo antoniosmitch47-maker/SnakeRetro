@@ -2,6 +2,7 @@
     <application
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:label="Snake Retro 3.0"
+            android:icon="@drawable/snake_icon"
         android:usesCleartextTraffic="false"
         android:allowBackup="true"
         android:supportsRtl="true">
