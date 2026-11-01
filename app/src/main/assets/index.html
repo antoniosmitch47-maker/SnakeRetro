@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Snake Retro 3.0</title>
+<style>
+:root{--bg:#c5e6a2;--ink:#244d2b;--panel:#edf7d9;--line:#6b914d;--gold:#e0a51b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:monospace;text-align:center;user-select:none}
+header{padding:12px 8px 4px}h1{font-size:clamp(23px,6vw,34px);margin:0;letter-spacing:2px}.sub{font-size:11px;margin:5px}
+.wrap{max-width:560px;margin:auto;padding:8px}.stats{display:flex;gap:6px;justify-content:space-around;margin:8px 0}
+.stat,.panel{background:var(--panel);border:3px solid var(--ink);border-radius:8px;padding:8px}.stat{flex:1;font-size:11px}.stat b{display:block;font-size:19px;margin-top:3px}
+canvas{display:block;width:min(94vw,440px);height:min(94vw,440px);max-width:440px;max-height:440px;margin:8px auto;background:#b5d98c;border:5px solid var(--ink);border-radius:5px;image-rendering:pixelated;touch-action:none}
+button{font: bold 13px monospace;color:var(--ink);background:#edf7d9;border:2px solid var(--ink);border-radius:7px;padding:10px;margin:3px}button:disabled{opacity:.45}button:active{transform:scale(.97)}
+.actions,.tabs{display:flex;justify-content:center;flex-wrap:wrap}.controls{width:190px;margin:8px auto;display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.controls button{font-size:22px;margin:0;padding:10px}.empty{visibility:hidden}
+#message{min-height:22px;margin:7px;font-weight:bold}.section{display:none;text-align:left;margin:8px 0}.section.active{display:block}.section h2{text-align:center;font-size:17px}
+.item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px;margin:6px 0;background:var(--panel);border:2px solid var(--line);border-radius:7px}.iteminfo{display:flex;align-items:center;gap:9px;min-width:0;text-align:left}.iteminfo small{display:block;line-height:1.35;margin-top:3px;color:#55724b}.thumb{width:48px;height:48px;flex:none;border:2px solid #78975b;border-radius:7px;background:#dcefc4;display:grid;place-items:center;font-size:26px}.item button{white-space:nowrap}.pill{font-size:10px;background:#d4e9b9;padding:3px 5px;border-radius:4px}
+#overlay{display:none;position:fixed;inset:0;background:#18351dcc;z-index:5;align-items:center;justify-content:center;padding:18px}
+#overlay .panel{max-width:350px;width:100%;text-align:center;position:relative;padding:22px 16px}
+#closeOverlay{position:absolute;right:6px;top:5px;font-size:18px;padding:5px 10px}
+#trialBar{display:none;background:#fff0b9;border:2px dashed #8d6410;border-radius:7px;padding:7px;margin:6px}
+footer{font-size:10px;padding:10px;opacity:.8}.muted{font-size:12px;line-height:1.6}
+</style></head>
+<body>
+<header><h1>🐍 SNAKE RETRO 3.0</h1><div class="sub">ARCADE CLÁSICO • EDICIÓN ZENCOINS</div></header>
+<div class="wrap">
+<div class="stats"><div class="stat">PUNTOS<b id="score">0</b></div><div class="stat">RÉCORD<b id="best">0</b></div><div class="stat">🪙 ZENCOINS<b id="coins">0</b></div></div>
+<div id="trialBar">👁 MODO PRUEBA: no ganas puntos, récord ni Zencoins <button id="exitTrial">SALIR</button></div>
+<canvas id="game" width="440" height="440"></canvas><div id="message">Pulsa JUGAR para comenzar</div>
+<div class="actions"><button id="start">▶ JUGAR</button><button id="pause">Ⅱ PAUSA</button><button id="restart">↻ REINICIAR</button></div>
+<div class="controls"><span class="empty"></span><button data-dir="up">▲</button><span class="empty"></span><button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button></div>
+<div class="panel muted">Poderes disponibles: <span id="powerstatus">ninguno</span><div id="powerbuttons"></div></div>
+<div class="tabs"><button data-tab="shop">🛒 TIENDA</button><button data-tab="inventory">🎒 MOCHILA</button><button data-tab="skins">🐍 SKINS</button><button data-tab="help">❔ AYUDA</button></div>
+<section class="section active" id="shop"><h2>TIENDA DE PODERES</h2><div id="powerShop"></div></section>
+<section class="section" id="inventory"><h2>TU MOCHILA</h2><div id="inventoryList"></div></section>
+<section class="section" id="skins"><h2>CATÁLOGO DE SKINS</h2><div id="skinList"></div></section>
+<section class="section" id="help"><h2>CÓMO JUGAR</h2><div class="panel muted">Come manzanas para sumar puntos. Las monedas valen 5 Zencoins y aparecen 3 segundos después de empezar o recoger otra moneda. Una moneda que no recoges permanece en el tablero.<br>Usa flechas o WASD. La velocidad aumenta cada 3 manzanas.<br>Los poderes son consumibles y se activan durante la partida.<br>Tu progreso se guarda en este navegador. Borrar sus datos puede eliminarlo. No se sincroniza entre dispositivos.</div></section>
+</div>
+<div id="overlay"><div class="panel"><button id="closeOverlay" aria-label="Cerrar">✕</button><h2 id="overTitle">FIN DEL JUEGO</h2><p id="overText"></p><button id="again">↻ VOLVER A JUGAR</button></div></div>
+<footer>Snake Retro 3.0 • Juego offline</footer>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id),ctx=$('game').getContext('2d'),N=20,C=22;
+const defaults={coins:0,best:0,owned:['classic'],equipped:'classic',inventory:{shield:0,slow:0,magnet:0,double:0,second:0}};
+let old={};try{old=JSON.parse(localStorage.getItem('snakeRetro30')||'{}')}catch(e){}
+let data={...defaults,...old,inventory:{...defaults.inventory,...(old.inventory||{})}};
+const skins=[
+{id:'classic',name:'Clásica',tier:'Común',color:'#24552d',price:0,icon:'🐍',effect:'Apariencia clásica'},
+{id:'lime',name:'Lima',tier:'Común',color:'#72a83d',price:200,icon:'🍃',effect:'Cuerpo de hojas con nervaduras luminosas'},
+{id:'ocean',name:'Océano',tier:'Rara',color:'#287b9d',price:400,icon:'🌊',effect:'Cuerpo ondulado con crestas de ola'},
+{id:'violet',name:'Violeta',tier:'Rara',color:'#8050a0',price:800,icon:'🔮',effect:'Cuerpo de cristales facetados'},
+{id:'fire',name:'Fuego',tier:'Épica',color:'#e65b22',price:1000,icon:'🔥',effect:'Cuerpo de llamas con núcleo ardiente'},
+{id:'ice',name:'Hielo',tier:'Épica',color:'#58bddd',price:1500,icon:'❄️',effect:'Cuerpo de hielo con cristales y copos'},
+{id:'electric',name:'Eléctrica',tier:'Épica',color:'#c5ad16',price:2000,icon:'⚡',effect:'Cuerpo con rayo zigzagueante'},
+{id:'galaxy',name:'Galaxia',tier:'Legendaria',color:'#7445aa',price:3000,icon:'🌌',effect:'Cabeza de dragón cósmico, escamas estelares y aura galáctica'},
+{id:'gold',name:'Dorada',tier:'Legendaria',color:'#d4a51e',price:4000,icon:'👑',effect:'Cabeza de dragón dorado, escamas metálicas y resplandor'},
+{id:'shadow',name:'Sombra',tier:'Legendaria',color:'#313447',price:5000,icon:'🌑',effect:'Cabeza de dragón sombrío, cuernos y aura oscura'}
+];
+const powers=[
+{id:'shield',name:'Escudo',price:400,icon:'🛡️',desc:'Protección de colisión durante 5 segundos.'},
+{id:'slow',name:'Tiempo lento',price:350,icon:'🐢',desc:'Reduce la velocidad durante 10 segundos.'},
+{id:'magnet',name:'Imán de monedas',price:350,icon:'🧲',desc:'Atrae monedas cercanas durante 10 segundos.'},
+{id:'double',name:'Monedas x2',price:450,icon:'✖️',desc:'Duplica monedas durante 30 segundos.'},
+{id:'second',name:'Segunda oportunidad',price:500,icon:'💚',desc:'Te salva de una colisión una vez en la partida.'}
+];
+let snake=[],dir={x:1,y:0},nextDir={x:1,y:0},apple=null,coin=null,score=0,running=false,paused=false,dead=false,trial=false,trialSkin=null,oldEquipped=null,preview=null,timer=null,coinTimer=null,active={},secondReady=false,secondUsed=false,particles=[];
+const now=()=>Date.now(),skinNow=()=>skins.find(s=>s.id===(trial?trialSkin:(preview||data.equipped)))||skins[0];
+function save(){try{localStorage.setItem('snakeRetro30',JSON.stringify(data))}catch(e){}stats()}
+function stats(){$('score').textContent=score;$('best').textContent=data.best;$('coins').textContent=data.coins}
+function rand(){return {x:Math.floor(Math.random()*N),y:Math.floor(Math.random()*N)}}
+function free(){let p;do{p=rand()}while(snake.some(s=>s.x===p.x&&s.y===p.y)||(apple&&p.x===apple.x&&p.y===apple.y)||(coin&&p.x===coin.x&&p.y===coin.y));return p}
+function effectColor(id){return ({fire:'#ff8b27',ice:'#c9f8ff',electric:'#fff36b',galaxy:'#d7aaff',gold:'#fff0a1',shadow:'#a9a9c7'})[id]||'#fff'}
+function drawDragonHead(cx,cy,sk){
+ const palettes={
+  galaxy:{main:'#7445aa',light:'#e1b9ff',dark:'#352052',eye:'#7ff7ff'},
+  gold:{main:'#d4a51e',light:'#fff0a1',dark:'#80520c',eye:'#ff3b18'},
+  shadow:{main:'#313447',light:'#9a9ab8',dark:'#11131e',eye:'#ff3030'}
+ };
+ const q=palettes[sk.id];ctx.save();ctx.translate(cx,cy);
+ const angle=Math.atan2(dir.y,dir.x);ctx.rotate(angle);
+ // Cuernos traseros y silueta de cabeza de dragón mirando hacia delante
+ ctx.fillStyle=q.dark;ctx.beginPath();ctx.moveTo(-5,-4);ctx.lineTo(-10,-12);ctx.lineTo(1,-7);ctx.lineTo(5,-5);ctx.closePath();ctx.fill();
+ ctx.beginPath();ctx.moveTo(-5,4);ctx.lineTo(-10,12);ctx.lineTo(1,7);ctx.lineTo(5,5);ctx.closePath();ctx.fill();
+ ctx.fillStyle=q.main;ctx.beginPath();ctx.moveTo(-9,-6);ctx.lineTo(4,-7);ctx.lineTo(9,-3);ctx.lineTo(12,0);ctx.lineTo(8,5);ctx.lineTo(3,7);ctx.lineTo(-9,6);ctx.closePath();ctx.fill();
+ // Hocico y mandíbula
+ ctx.fillStyle=q.light;ctx.beginPath();ctx.moveTo(3,-3);ctx.lineTo(12,-2);ctx.lineTo(11,3);ctx.lineTo(4,4);ctx.closePath();ctx.fill();
+ ctx.fillStyle=q.dark;ctx.fillRect(7,1,5,2);
+ // Ojos brillantes
+ ctx.fillStyle=q.eye;ctx.fillRect(0,-6,5,3);ctx.fillRect(0,3,5,3);
+ ctx.fillStyle='#fff';ctx.fillRect(1,-6,2,2);ctx.fillRect(1,3,2,2);
+ ctx.fillStyle=q.dark;ctx.fillRect(10,-2,2,2);ctx.fillRect(10,2,2,2);
+ // Cuernos superiores
+ ctx.fillStyle=q.light;ctx.beginPath();ctx.moveTo(-5,-5);ctx.lineTo(-8,-11);ctx.lineTo(0,-7);ctx.closePath();ctx.fill();
+ ctx.beginPath();ctx.moveTo(-5,5);ctx.lineTo(-8,11);ctx.lineTo(0,7);ctx.closePath();ctx.fill();
+ // Nariz
+ ctx.fillStyle=q.dark;ctx.fillRect(9,-2,2,1);ctx.fillRect(9,2,2,1);
+ ctx.restore();
+}
+function drawUniqueEffect(x,y,sk,i,t){
+ const cx=x+C/2,cy=y+C/2,phase=t/150+i*.8;
+ ctx.save();
+ if(sk.id==='fire'){
+  // Llamas que suben y cambian de altura alrededor del cuerpo
+  for(let k=0;k<2;k++){let px=cx+(k?6:-6),h=5+Math.sin(phase+k)*3;
+   ctx.fillStyle=k?'#ffd34e':'#ff6a20';ctx.beginPath();ctx.moveTo(px-3,cy+5);ctx.quadraticCurveTo(px-5,cy-h,px,cy-h-4);ctx.quadraticCurveTo(px+5,cy-h,px+3,cy+5);ctx.closePath();ctx.fill();}
+  ctx.fillStyle='#fff0a0';ctx.fillRect(cx-1,cy-2,2,4);
+ }else if(sk.id==='ice'){
+  // Cristales de seis puntas, con pequeños copos flotantes
+  ctx.strokeStyle='#eaffff';ctx.lineWidth=1.6;ctx.beginPath();
+  for(let a=0;a<3;a++){let ang=a*Math.PI/3;ctx.moveTo(cx-Math.cos(ang)*7,cy-Math.sin(ang)*7);ctx.lineTo(cx+Math.cos(ang)*7,cy+Math.sin(ang)*7)}
+  ctx.stroke();ctx.fillStyle='#ffffff';ctx.fillRect(cx+7,cy-7,3,3);ctx.fillRect(cx-9,cy+5,2,2);
+ }else if(sk.id==='electric'){
+  // Rayos angulosos que saltan a los lados
+  ctx.strokeStyle='#fff36b';ctx.lineWidth=2;ctx.beginPath();
+  let side=Math.sin(phase)>0?1:-1;ctx.moveTo(cx+side*5,cy-8);ctx.lineTo(cx-side*3,cy-2);ctx.lineTo(cx+side*4,cy+1);ctx.lineTo(cx-side*5,cy+8);ctx.stroke();
+  ctx.fillStyle='#fff';ctx.fillRect(cx-1,cy-1,3,3);
+ }else if(sk.id==='galaxy'){
+  // Mini estrellas y órbita violeta/cian
+  ctx.strokeStyle='#dcb8ff';ctx.lineWidth=1.4;ctx.beginPath();ctx.ellipse(cx,cy,10,5,phase*.25,0,Math.PI*2);ctx.stroke();
+  let sx=cx+Math.cos(phase)*10,sy=cy+Math.sin(phase)*5;ctx.fillStyle='#8ffaff';ctx.beginPath();ctx.moveTo(sx,sy-4);ctx.lineTo(sx+1.5,sy-1);ctx.lineTo(sx+4,sy);ctx.lineTo(sx+1.5,sy+1.5);ctx.lineTo(sx,sy+4);ctx.lineTo(sx-1.5,sy+1.5);ctx.lineTo(sx-4,sy);ctx.lineTo(sx-1.5,sy-1);ctx.closePath();ctx.fill();
+ }else if(sk.id==='gold'){
+  // Aro dorado y destellos de cuatro puntas
+  ctx.strokeStyle='#fff0a1';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(cx,cy,8+Math.sin(phase)*1.5,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='#fff9d2';for(let k=0;k<2;k++){let px=cx+Math.cos(phase+k*Math.PI)*10,py=cy+Math.sin(phase+k*Math.PI)*8;ctx.beginPath();ctx.moveTo(px,py-4);ctx.lineTo(px+1,py-1);ctx.lineTo(px+4,py);ctx.lineTo(px+1,py+1);ctx.lineTo(px,py+4);ctx.lineTo(px-1,py+1);ctx.lineTo(px-4,py);ctx.lineTo(px-1,py-1);ctx.closePath();ctx.fill()}
+ }else if(sk.id==='shadow'){
+  // Humo oscuro en remolinos y brillos rojos
+  ctx.globalAlpha=.45;ctx.fillStyle='#171827';ctx.beginPath();ctx.arc(cx-7,cy-5,4+Math.sin(phase)*1.5,0,Math.PI*2);ctx.arc(cx+7,cy+5,4+Math.cos(phase)*1.5,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=1;ctx.fillStyle='#ff4545';ctx.fillRect(cx-1,cy-1,3,3);
+ }
+ ctx.restore();
+}
+function draw(){
+ ctx.clearRect(0,0,440,440);ctx.strokeStyle='#a1c77b';ctx.lineWidth=1;
+ for(let i=0;i<=N;i++){ctx.beginPath();ctx.moveTo(i*C,0);ctx.lineTo(i*C,440);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*C);ctx.lineTo(440,i*C);ctx.stroke()}
+ if(apple){ctx.fillStyle='#d83b32';ctx.beginPath();ctx.arc((apple.x+.5)*C,(apple.y+.5)*C,7,0,7);ctx.fill();ctx.fillStyle='#386d2d';ctx.fillRect(apple.x*C+12,apple.y*C+2,4,7)}
+ if(coin){ctx.fillStyle='#e0a51b';ctx.beginPath();ctx.arc((coin.x+.5)*C,(coin.y+.5)*C,8,0,7);ctx.fill();ctx.strokeStyle='#8b6210';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#fff2b0';ctx.font='bold 14px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('$',(coin.x+.5)*C,(coin.y+.5)*C)}
+ const sk=skinNow(),special=['fire','ice','electric','galaxy','gold','shadow'].includes(sk.id);
+ const dragon=['galaxy','gold','shadow'].includes(sk.id);
+ particles=particles.filter(p=>p.life-->0);
+ snake.forEach((p,i)=>{
+  let x=p.x*C,y=p.y*C,cx=x+C/2,cy=y+C/2;
+  if(i===0&&dragon){drawDragonHead(cx,cy,sk);return}
+  // Cada skin tiene una silueta y un patrón propio, no solo un color distinto.
+  if(sk.id==='lime'){
+   ctx.fillStyle=sk.color;ctx.beginPath();ctx.ellipse(cx,cy,9,7,0,0,Math.PI*2);ctx.fill();
+   ctx.strokeStyle='#d8f5a5';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx-6,cy+4);ctx.quadraticCurveTo(cx,cy-6,cx+6,cy-4);ctx.stroke();
+   ctx.fillStyle='#efffcf';ctx.fillRect(cx-1,cy-1,3,3);
+  }else if(sk.id==='ocean'){
+   ctx.fillStyle=sk.color;ctx.beginPath();ctx.moveTo(x+2,y+16);ctx.quadraticCurveTo(x+7,y-1,x+13,y+8);ctx.quadraticCurveTo(x+17,y+14,x+20,y+5);ctx.lineTo(x+20,y+20);ctx.lineTo(x+2,y+20);ctx.closePath();ctx.fill();
+   ctx.strokeStyle='#b9f5ff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+4,y+10);ctx.quadraticCurveTo(x+10,y+2,x+17,y+10);ctx.stroke();
+  }else if(sk.id==='violet'){
+   ctx.fillStyle=sk.color;ctx.beginPath();ctx.moveTo(cx, y+1);ctx.lineTo(x+C-2,cy-2);ctx.lineTo(cx+3,y+C-2);ctx.lineTo(x+2,cy+2);ctx.closePath();ctx.fill();
+   ctx.fillStyle='#e8d5ff';ctx.beginPath();ctx.moveTo(cx,y+4);ctx.lineTo(cx+4,cy);ctx.lineTo(cx,cy+5);ctx.lineTo(cx-3,cy);ctx.closePath();ctx.fill();
+  }else if(sk.id==='fire'){
+   ctx.fillStyle='#a92c18';ctx.beginPath();ctx.moveTo(x+3,y+C-2);ctx.lineTo(x+4,y+9);ctx.lineTo(x+9,y+12);ctx.lineTo(x+11,y+2);ctx.lineTo(x+16,y+10);ctx.lineTo(x+19,y+5);ctx.lineTo(x+19,y+C-2);ctx.closePath();ctx.fill();
+   ctx.fillStyle='#ff9b27';ctx.beginPath();ctx.moveTo(x+7,y+18);ctx.lineTo(x+10,y+8);ctx.lineTo(x+14,y+17);ctx.closePath();ctx.fill();
+  }else if(sk.id==='ice'){
+   ctx.fillStyle=sk.color;ctx.beginPath();ctx.moveTo(cx,y+1);ctx.lineTo(x+C-2,cy);ctx.lineTo(cx,y+C-2);ctx.lineTo(x+2,cy);ctx.closePath();ctx.fill();
+   ctx.strokeStyle='#eaffff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,cy-6);ctx.lineTo(cx,cy+6);ctx.moveTo(cx-6,cy);ctx.lineTo(cx+6,cy);ctx.moveTo(cx-4,cy-4);ctx.lineTo(cx+4,cy+4);ctx.stroke();
+  }else if(sk.id==='electric'){
+   ctx.fillStyle=sk.color;ctx.fillRect(x+3,y+3,C-6,C-6);
+   ctx.fillStyle='#fff36b';ctx.beginPath();ctx.moveTo(cx+2,y+2);ctx.lineTo(cx-5,cy+1);ctx.lineTo(cx,cy+1);ctx.lineTo(cx-2,y+C-2);ctx.lineTo(cx+6,cy-2);ctx.lineTo(cx+1,cy-2);ctx.closePath();ctx.fill();
+  }else{
+   ctx.fillStyle=sk.color;ctx.fillRect(x+2,y+2,C-4,C-4);
+   if(dragon){
+    // Escamas angulares en los dragones legendarios
+    ctx.fillStyle=sk.id==='galaxy'?'#c99af0':sk.id==='gold'?'#fff0a1':'#777990';
+    ctx.beginPath();ctx.moveTo(cx, y+4);ctx.lineTo(x+C-4,cy);ctx.lineTo(cx,y+C-4);ctx.lineTo(x+4,cy);ctx.closePath();ctx.fill();
+    ctx.strokeStyle=sk.id==='gold'?'#fff4bd':sk.id==='galaxy'?'#e4c5ff':'#a5a5bd';ctx.lineWidth=1;ctx.stroke();
+    if(sk.id==='gold'){ctx.fillStyle='#fff5b5';ctx.fillRect(x+5,y+5,3,3)}
+    if(sk.id==='shadow'){ctx.fillStyle='#ff4545';ctx.fillRect(x+8,y+8,3,3)}
+   }else if(i===0){
+    ctx.fillStyle='#eff7d9';ctx.fillRect(x+5,y+5,4,4);ctx.fillRect(x+13,y+5,4,4);ctx.fillStyle='#18351d';ctx.fillRect(x+6,y+6,2,2);ctx.fillRect(x+14,y+6,2,2)
+   }
+  }
+  if(i===0&&!dragon){
+   // Cabeza bien definida y orientada hacia el movimiento para que los ojos siempre se vean.
+   ctx.save();ctx.translate(cx,cy);ctx.rotate(Math.atan2(dir.y,dir.x));
+   ctx.fillStyle=sk.color;ctx.beginPath();ctx.ellipse(1,0,9,8,0,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle=sk.id==='fire'?'#ffcc72':sk.id==='ice'?'#efffff':sk.id==='electric'?'#fff36b':sk.id==='ocean'?'#b9f5ff':sk.id==='violet'?'#e8d5ff':'#efffcf';
+   ctx.fillRect(4,-5,3,3);ctx.fillRect(4,2,3,3);
+   ctx.fillStyle='#17251a';ctx.fillRect(5,-4,2,2);ctx.fillRect(5,3,2,2);
+   ctx.fillStyle=sk.color;ctx.beginPath();ctx.moveTo(6,-3);ctx.lineTo(12,0);ctx.lineTo(6,3);ctx.closePath();ctx.fill();
+   if(sk.id==='fire'){ctx.fillStyle='#ffb12c';ctx.beginPath();ctx.moveTo(-4,-5);ctx.lineTo(-8,-11);ctx.lineTo(1,-7);ctx.fill();ctx.beginPath();ctx.moveTo(-4,5);ctx.lineTo(-8,11);ctx.lineTo(1,7);ctx.fill()}
+   if(sk.id==='ice'){ctx.strokeStyle='#eaffff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-4,-5);ctx.lineTo(-8,-10);ctx.moveTo(-4,5);ctx.lineTo(-8,10);ctx.stroke()}
+   if(sk.id==='electric'){ctx.fillStyle='#fff36b';ctx.fillRect(-7,-7,3,3);ctx.fillRect(-7,4,3,3)}
+   ctx.restore();
+  }
+  if(special)drawUniqueEffect(x,y,sk,i,Date.now());
+ });
+ // Efecto exclusivo alrededor de la cabeza de cada dragón legendario
+ if(dragon&&snake.length){
+  const h=snake[0],cx=(h.x+.5)*C,cy=(h.y+.5)*C,t=Date.now()/180;
+  ctx.save();ctx.globalAlpha=.75;ctx.lineWidth=2;
+  if(sk.id==='galaxy'){ctx.strokeStyle='#b78aff';ctx.beginPath();ctx.ellipse(cx,cy,16,8,t*.4,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#8ffaff';ctx.fillRect(cx+Math.cos(t)*15,cy+Math.sin(t)*7,3,3)}
+  if(sk.id==='gold'){ctx.strokeStyle='#fff0a1';ctx.beginPath();ctx.arc(cx,cy,15+Math.sin(t)*2,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#fff4bd';ctx.fillRect(cx-2,cy-17,4,4)}
+  if(sk.id==='shadow'){ctx.strokeStyle='#4a263d';ctx.beginPath();ctx.arc(cx,cy,14+Math.cos(t)*2,Math.PI*.1,Math.PI*1.7);ctx.stroke();ctx.fillStyle='#ff3030';ctx.fillRect(cx+11,cy-7,3,3)}
+  ctx.restore();
+ }
+ particles.forEach(p=>{ctx.globalAlpha=p.life/16;ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,3,3)});ctx.globalAlpha=1;
+ if(!running&&!dead&&!trial){ctx.fillStyle='#244d2b';ctx.font='bold 19px monospace';ctx.textAlign='center';ctx.fillText('SNAKE RETRO',220,210);ctx.font='12px monospace';ctx.fillText('PULSA JUGAR',220,235)}
+}
+function msg(t){$('message').textContent=t}
+function scheduleCoin(){clearTimeout(coinTimer);coinTimer=setTimeout(()=>{if(running&&!coin){coin=free();draw()}},3000)}
+function begin(isTrial=false,id=null){
+ clearInterval(timer);clearTimeout(coinTimer);trial=isTrial;trialSkin=id;oldEquipped=data.equipped;
+ $('trialBar').style.display=trial?'block':'none';$('overlay').style.display='none';
+ snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];dir={x:1,y:0};nextDir={x:1,y:0};score=0;apple=free();coin=null;running=true;paused=false;dead=false;active={};secondReady=false;secondUsed=false;particles=[];
+ msg(trial?'MODO PRUEBA: juega sin premios':'¡A comer manzanas!');stats();scheduleCoin();loop();renderPowerButtons();draw();
+}
+function loop(){clearInterval(timer);timer=setInterval(tick,active.slow>now()?205:Math.max(65,145-Math.floor(score/3)*5))}
+function tick(){
+ if(!running||paused)return;dir=nextDir;let h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+ let hit=h.x<0||h.x>=N||h.y<0||h.y>=N||snake.some((p,i)=>i<snake.length-1&&p.x===h.x&&p.y===h.y);
+ if(hit){if(!trial&&active.shield>now()){active.shield=0;h=free();msg('¡Escudo te salvó!')}
+ else if(!trial&&secondReady&&!secondUsed){secondUsed=true;secondReady=false;h=free();msg('¡Segunda oportunidad!');}
+ else return gameOver()}
+ snake.unshift(h);
+ if(h.x===apple.x&&h.y===apple.y){if(!trial){score++;if(score>data.best){data.best=score;save()}if(score%3===0){msg('¡Velocidad aumentada!');loop()}}apple=free()}
+ else snake.pop();
+ if(!trial&&coin&&h.x===coin.x&&h.y===coin.y){data.coins+=active.double>now()?10:5;coin=null;save();scheduleCoin();renderShop();renderInventory()}
+ if(!trial&&coin&&active.magnet>now()){let dx=snake[0].x-coin.x,dy=snake[0].y-coin.y;if(Math.abs(dx)+Math.abs(dy)<=4){coin={x:coin.x+Math.sign(dx),y:coin.y+Math.sign(dy)};if(coin.x===snake[0].x&&coin.y===snake[0].y){data.coins+=active.double>now()?10:5;coin=null;save();scheduleCoin();renderShop();renderInventory()}}}
+ if(!trial)stats();draw();
+}
+function gameOver(){running=false;dead=true;clearInterval(timer);clearTimeout(coinTimer);if(!trial&&score>data.best){data.best=score;save()}$('overTitle').textContent=trial?'FIN DE LA PRUEBA':'FIN DEL JUEGO';$('overText').textContent=trial?'Prueba terminada. No se ganaron premios.':'Puntuación: '+score+' • Récord: '+data.best;$('again').textContent=trial?'PROBAR OTRA VEZ':'VOLVER A JUGAR';$('overlay').style.display='flex';msg('Partida terminada');draw()}
+function closeOverlay(){ $('overlay').style.display='none';if(trial)endTrial();else{running=false;dead=true;msg('Puedes visitar la tienda o comenzar otra partida.');draw()}renderAll()}
+function endTrial(){clearInterval(timer);clearTimeout(coinTimer);running=false;paused=false;trial=false;trialSkin=null;$('trialBar').style.display='none';$('overlay').style.display='none';snake=[];apple=null;coin=null;msg('Prueba finalizada. ¡Elige otra skin o juega!');draw();renderAll()}
+function change(d){if(!running||paused)return;let v={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}}[d];if(v&&!(v.x===-dir.x&&v.y===-dir.y))nextDir=v}
+document.querySelectorAll('[data-dir]').forEach(b=>b.onclick=()=>change(b.dataset.dir));
+document.addEventListener('keydown',e=>{let k=e.key.toLowerCase(),m={arrowup:'up',w:'up',arrowdown:'down',s:'down',arrowleft:'left',a:'left',arrowright:'right',d:'right'};if(m[k]){e.preventDefault();change(m[k])}});
+$('start').onclick=()=>{if(trial)return;if(!running)begin(false);else if(paused)togglePause()};
+$('restart').onclick=()=>{if(trial)begin(true,trialSkin);else begin(false)};
+$('pause').onclick=togglePause;$('again').onclick=()=>trial?begin(true,trialSkin):begin(false);$('closeOverlay').onclick=closeOverlay;$('exitTrial').onclick=endTrial;
+function togglePause(){if(!running||trial)return;paused=!paused;if(paused){clearInterval(timer);msg('Juego en pausa')}else{msg('¡Seguimos!');loop()}draw();renderInventory();renderPowerButtons()}
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));$(b.dataset.tab).classList.add('active')});
+function row(icon,title,detail,price,buttonText,disabled,action){let el=document.createElement('div');el.className='item';let info=document.createElement('div');info.className='iteminfo';info.innerHTML=`<div class="thumb">${icon}</div><div><b>${title}</b><small>${detail}</small><small>${price}</small></div>`;let btn=document.createElement('button');btn.textContent=buttonText;btn.disabled=disabled;btn.onclick=action;el.append(info,btn);return el}
+function renderShop(){$('powerShop').innerHTML='';powers.forEach(p=>$('powerShop').append(row(p.icon,p.name,p.desc,'Precio: '+p.price+' 🪙','COMPRAR',data.coins<p.price,()=>{data.coins-=p.price;data.inventory[p.id]++;save();renderAll()})))}
+function activate(id){if(!running||paused||trial||!data.inventory[id])return;data.inventory[id]--;if(id==='second'){secondReady=true;secondUsed=false;msg('Segunda oportunidad lista para esta partida')}else{active[id]=now()+({shield:5000,slow:10000,magnet:10000,double:30000}[id]);msg(powers.find(p=>p.id===id).name+' activado');if(id==='slow')loop()}save();renderAll()}
+function renderInventory(){$('inventoryList').innerHTML='';powers.forEach(p=>{$('inventoryList').append(row(p.icon,p.name,p.desc,'Disponibles: '+data.inventory[p.id],'ACTIVAR',!data.inventory[p.id]||!running||paused||trial,()=>activate(p.id)))});if(!powers.some(p=>data.inventory[p.id]))$('inventoryList').innerHTML='<p>No tienes poderes. Compra alguno en la tienda.</p>'}
+function renderPowerButtons(){$('powerstatus').textContent=powers.filter(p=>data.inventory[p.id]>0).map(p=>p.name+': '+data.inventory[p.id]).join(' • ')||'ninguno';$('powerbuttons').innerHTML='';powers.forEach(p=>{if(data.inventory[p.id]>0){let b=document.createElement('button');b.textContent=p.icon+' '+p.name+' ×'+data.inventory[p.id];b.disabled=!running||paused||trial;b.onclick=()=>activate(p.id);$('powerbuttons').append(b)}})}
+function renderSkins(){$('skinList').innerHTML='';skins.forEach(s=>{let owned=data.owned.includes(s.id);let el=document.createElement('div');el.className='item';let info=document.createElement('div');info.className='iteminfo';info.innerHTML=`<div class="thumb">${s.icon}</div><div><b>${s.name}</b> <span class="pill">${s.tier}</span><small>${s.effect}</small><small>${s.price===0?'Gratis':s.price.toLocaleString('es-NI')+' Zencoins'}</small></div>`;let controls=document.createElement('div');let test=document.createElement('button');test.textContent='PROBAR';test.onclick=()=>begin(true,s.id);controls.append(test);let buy=document.createElement('button');buy.textContent=owned?(data.equipped===s.id?'EQUIPADA':'EQUIPAR'):'COMPRAR';buy.disabled=owned&&data.equipped===s.id||(!owned&&data.coins<s.price);buy.onclick=()=>{if(!owned){if(data.coins<s.price)return;data.coins-=s.price;data.owned.push(s.id)}data.equipped=s.id;preview=null;save();renderAll();draw()};controls.append(buy);el.append(info,controls);$('skinList').append(el)})}
+function renderAll(){stats();renderShop();renderInventory();renderSkins();renderPowerButtons()}
+renderAll();draw();
+})();
+</script></body></html>

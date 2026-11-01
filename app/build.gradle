@@ -1,0 +1,15 @@
+plugins {
+    id 'com.android.application'
+}
+android {
+    namespace 'com.serpienteretro.game'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.serpienteretro.game'
+        minSdk 23
+        targetSdk 28
+        versionCode 1
+        versionName '3.0'
+    }
+}
