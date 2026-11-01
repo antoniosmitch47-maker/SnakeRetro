@@ -8,7 +8,7 @@ android {
     defaultConfig {
         applicationId 'com.serpienteretro.game'
         minSdk 23
-        targetSdk 28
+        targetSdk 35
         versionCode 1
         versionName '3.0'
     }
